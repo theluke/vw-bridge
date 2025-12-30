@@ -1,0 +1,12 @@
+[Unit]
+Description=VW SmartThings Bridge
+After=network.target
+
+[Service]
+User=luca
+WorkingDirectory=/home/luca/scripts/vw-bridge
+ExecStart=/home/luca/scripts/vw-bridge/venv/bin/python3 main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
