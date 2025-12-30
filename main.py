@@ -1,76 +1,64 @@
 import os
+import subprocess
 import logging
-import time
 from flask import Flask, jsonify
 from dotenv import load_dotenv
-from weconnect import weconnect
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Load credentials
 load_dotenv()
 USERNAME = os.getenv('VW_USERNAME')
 PASSWORD = os.getenv('VW_PASSWORD')
 SPIN = os.getenv('VW_SPIN')
+VIN = 'WVWZZZAUZLW802874'
+
+# Absolute path to your venv's CLI tool
+CLI_PATH = '/home/luca/scripts/vw-bridge/venv/bin/weconnect-cli'
 
 app = Flask(__name__)
 
-def get_weconnect():
-    """Attempts to connect to VW with retries for those 500 errors."""
-    for i in range(3):
-        try:
-            return weconnect.WeConnect(
-                username=USERNAME, 
-                password=PASSWORD, 
-                updateAfterLogin=True,
-                updatePictures=False # Critical: Avoids 429/500 errors
-            )
-        except Exception as e:
-            logger.warning(f"Connection attempt {i+1} failed: {e}. Retrying in 10s...")
-            time.sleep(10)
-    return None
-
-# Initialize once
-weConnect = get_weconnect()
-
-def perform_action(mode_string):
-    if not weConnect:
-        return {"error": "VW Server is down (500). Try again later."}, 503
+def run_vw_command(action_type):
+    """
+    Executes the CLI command as a subprocess.
+    action_type: 'flash' or 'honkandflash'
+    """
+    cmd = [
+        CLI_PATH,
+        '--username', USERNAME,
+        '--password', PASSWORD,
+        '--spin', SPIN,
+        'set', f'/vehicles/{VIN}/controls/honkAndFlash', action_type
+    ]
     
     try:
-        weConnect.update()
-        vin = list(weConnect.vehicles.keys())[0]
-        vehicle = weConnect.vehicles[vin]
-
-        # Use the absolute path logic that the CLI uses
-        control = None
-        if hasattr(vehicle, 'controls'):
-            # In your GTE, it's usually an attribute of the controls object
-            control = getattr(vehicle.controls, 'honkAndFlash', None)
+        logger.info(f"Executing CLI command for: {action_type}")
+        # Run the command and wait for it to finish
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
-        if control:
-            control.value.mode.value = mode_string 
-            control.value.spin.value = SPIN
-            control.enabled = True
-            logger.info(f"Successfully sent {mode_string} to {vin}")
-            return {"status": "success", "action": mode_string}, 200
-        
-        return {"error": "Control honkAndFlash not found on this vehicle"}, 404
-
+        if result.returncode == 0:
+            logger.info(f"CLI Success: {result.stdout.strip()}")
+            return {"status": "success", "action": action_type}, 200
+        else:
+            logger.error(f"CLI Failed: {result.stderr.strip()}")
+            return {"status": "error", "message": result.stderr.strip()}, 500
+            
     except Exception as e:
-        logger.error(f"Action failed: {str(e)}")
+        logger.error(f"System error: {str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
-@app.route('/horn')
+@app.route('/horn', methods=['GET'])
 def trigger_horn():
-    res, code = perform_action('honkandflash')
+    res, code = run_vw_command('honkandflash')
     return jsonify(res), code
 
-@app.route('/flash')
+@app.route('/flash', methods=['GET'])
 def trigger_flash():
-    res, code = perform_action('flash')
+    res, code = run_vw_command('flash')
     return jsonify(res), code
 
 if __name__ == '__main__':
+    # Flask listens on port 5000 for SmartThings
     app.run(host='0.0.0.0', port=5000)
