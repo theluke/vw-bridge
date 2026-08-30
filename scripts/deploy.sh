@@ -33,7 +33,8 @@ mkdir -p "$backup_root" "$backup"
 rsync -a --exclude='.git/' --exclude='.env' --exclude='venv/' "$deploy_dir/" "$backup/"
 rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='venv/' "$stage/" "$deploy_dir/"
 
-if ! "$deploy_dir/venv/bin/python" -m pip install -q -r "$deploy_dir/requirements.txt" \
+if ! "$deploy_dir/venv/bin/python" -m pip uninstall -q -y weconnect weconnect-cli \
+    || ! "$deploy_dir/venv/bin/python" -m pip install -q -r "$deploy_dir/requirements.txt" \
     || ! sudo install -m 0644 "$deploy_dir/vw-bridge.service" /etc/systemd/system/vw-bridge.service \
     || ! sudo systemctl daemon-reload \
     || ! sudo systemctl restart vw-bridge \

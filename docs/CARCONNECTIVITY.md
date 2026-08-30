@@ -18,6 +18,8 @@ Credentials remain in the existing mode-protected `.env`. At command time the
 bridge builds connector JSON in an anonymous Linux memory file and passes only
 `/proc/self/fd/<fd>` to the child process. Token and cache files are stored in
 the protected deployment directory so a future successful login can be reused.
+Deployment removes the obsolete `weconnect` and `weconnect-cli` packages from a
+reused virtual environment before installing the pinned successor packages.
 
 ## Live validation result
 
