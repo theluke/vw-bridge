@@ -33,7 +33,7 @@ VW_ANDROID_SSH_KEY = os.getenv("VW_ANDROID_SSH_KEY", "/home/luca/.ssh/vw-android
 VW_ANDROID_SCRIPT = os.getenv(
     "VW_ANDROID_SCRIPT", "/data/data/com.termux/files/home/vw_android_app.py"
 )
-VW_COMMAND_TIMEOUT = int(os.getenv("VW_COMMAND_TIMEOUT", "60"))
+VW_COMMAND_TIMEOUT = int(os.getenv("VW_COMMAND_TIMEOUT", "90"))
 VW_READY_CACHE_SECONDS = int(os.getenv("VW_READY_CACHE_SECONDS", "300"))
 
 app = Flask(__name__)

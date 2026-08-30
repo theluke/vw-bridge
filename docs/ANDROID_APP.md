@@ -42,6 +42,8 @@ VW_ANDROID_SCRIPT=/data/data/com.termux/files/home/vw_android_app.py
 
 The standard deploy script copies the committed phone script over SSH and runs
 only its non-actuating `status` command before restarting the bridge.
+Set `VW_COMMAND_TIMEOUT=90`; the official app can take about one minute to
+complete a command, including SSH and UI preparation overhead.
 
 ## Phone requirements
 
