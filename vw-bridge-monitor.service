@@ -1,0 +1,18 @@
+[Unit]
+Description=Check the VW bridge, VW API readiness, and Raspberry Pi Tailscale state
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=luca
+WorkingDirectory=/home/luca/github/vw-bridge
+EnvironmentFile=-/etc/vw-bridge-monitor.env
+ExecStart=/home/luca/github/vw-bridge/.venv/bin/python /home/luca/github/vw-bridge/monitor.py
+StateDirectory=vw-bridge-monitor
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/vw-bridge-monitor

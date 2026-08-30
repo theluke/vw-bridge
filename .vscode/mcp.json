@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "smartthings": {
+      "type": "stdio",
+      "command": "/home/luca/github/vw-bridge/.venv/bin/python",
+      "args": [
+        "/home/luca/github/vw-bridge/smartthings_mcp.py"
+      ],
+      "env": {
+        "SMARTTHINGS_CLI": "/home/luca/.local/bin/smartthings",
+        "XDG_CONFIG_HOME": "/home/luca/.config/smartthings-copilot"
+      }
+    }
+  }
+}
