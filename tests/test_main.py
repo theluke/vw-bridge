@@ -17,7 +17,7 @@ def test_healthz_is_liveness_only():
 
 def test_readyz_redacts_vw_authentication_failure():
     failure = subprocess.CompletedProcess(
-        [], 1, "", "TokenExpiredError\nKeyError: 'location'"
+        [], 1, "", "Authorization URL could not be fetched due to WeConnect failure"
     )
 
     with patch.object(main, "_configuration_error", return_value=None), patch.object(
@@ -27,11 +27,12 @@ def test_readyz_redacts_vw_authentication_failure():
 
     assert response.status_code == 503
     assert response.get_json()["error_code"] == "vw_auth_unavailable"
-    assert "KeyError" not in response.get_data(as_text=True)
+    assert "Authorization URL" not in response.get_data(as_text=True)
 
 
 def test_readyz_caches_successful_probe():
-    success = subprocess.CompletedProcess([], 0, main.VW_VIN, "")
+    setter = f"/garage/{main.VW_VIN}/commands/honk-flash"
+    success = subprocess.CompletedProcess([], 0, setter, "")
 
     with patch.object(main, "_configuration_error", return_value=None), patch.object(
         main, "_run_cli", return_value=success
@@ -56,3 +57,40 @@ def test_action_returns_stable_error_without_backend_output():
     assert response.status_code == 503
     assert response.get_json()["error_code"] == "vw_command_failed"
     assert "secret" not in response.get_data(as_text=True)
+
+
+def test_flash_uses_carconnectivity_lights_only_command():
+    success = subprocess.CompletedProcess([], 0, "", "")
+
+    with patch.object(main, "_configuration_error", return_value=None), patch.object(
+        main, "_run_cli", return_value=success
+    ) as run_cli:
+        response = main.app.test_client().get("/flash")
+
+    assert response.status_code == 200
+    run_cli.assert_called_once_with(
+        ["set", f"/garage/{main.VW_VIN}/commands/honk-flash", "flash"]
+    )
+
+
+def test_horn_uses_combined_command():
+    success = subprocess.CompletedProcess([], 0, "", "")
+
+    with patch.object(main, "_configuration_error", return_value=None), patch.object(
+        main, "_run_cli", return_value=success
+    ) as run_cli:
+        response = main.app.test_client().get("/horn")
+
+    assert response.status_code == 200
+    run_cli.assert_called_once_with(
+        ["set", f"/garage/{main.VW_VIN}/commands/honk-flash", "honk-and-flash"]
+    )
+
+
+def test_cli_command_does_not_expose_credentials():
+    command = main._base_command("/proc/self/fd/7")
+
+    assert main.VW_USERNAME not in command
+    assert main.VW_PASSWORD not in command
+    assert main.VW_SPIN not in command
+    assert command[-1] == "/proc/self/fd/7"

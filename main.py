@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -17,7 +18,13 @@ VW_PASSWORD = os.getenv("VW_PASSWORD", "")
 VW_SPIN = os.getenv("VW_SPIN", "")
 VW_VIN = os.getenv("VW_VIN", "WVWZZZAUZLW802874")
 VW_CLI_PATH = os.getenv(
-    "VW_CLI_PATH", "/home/luca/scripts/vw-bridge/venv/bin/weconnect-cli"
+    "VW_CLI_PATH", "/home/luca/scripts/vw-bridge/venv/bin/carconnectivity-cli"
+)
+VW_TOKEN_PATH = os.getenv(
+    "VW_TOKEN_PATH", "/home/luca/scripts/vw-bridge/.carconnectivity.token"
+)
+VW_CACHE_PATH = os.getenv(
+    "VW_CACHE_PATH", "/home/luca/scripts/vw-bridge/.carconnectivity.cache"
 )
 VW_COMMAND_TIMEOUT = int(os.getenv("VW_COMMAND_TIMEOUT", "60"))
 VW_READY_CACHE_SECONDS = int(os.getenv("VW_READY_CACHE_SECONDS", "300"))
@@ -26,31 +33,64 @@ app = Flask(__name__)
 _readiness_cache = {"checked_at": 0.0, "payload": None}
 
 
-def _base_command():
+def _carconnectivity_config():
+    return {
+        "carConnectivity": {
+            "connectors": [
+                {
+                    "type": "volkswagen",
+                    "config": {
+                        "username": VW_USERNAME,
+                        "password": VW_PASSWORD,
+                        "spin": VW_SPIN,
+                    },
+                }
+            ]
+        }
+    }
+
+
+def _base_command(config_path):
     return [
         VW_CLI_PATH,
-        "--username",
-        VW_USERNAME,
-        "--password",
-        VW_PASSWORD,
-        "--spin",
-        VW_SPIN,
+        "--tokenfile",
+        VW_TOKEN_PATH,
+        "--cachefile",
+        VW_CACHE_PATH,
+        config_path,
     ]
 
 
 def _run_cli(arguments, timeout=VW_COMMAND_TIMEOUT):
-    return subprocess.run(
-        _base_command() + arguments,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    config_fd = os.memfd_create("carconnectivity-config")
+    try:
+        os.write(config_fd, json.dumps(_carconnectivity_config()).encode())
+        os.lseek(config_fd, 0, os.SEEK_SET)
+        return subprocess.run(
+            _base_command(f"/proc/self/fd/{config_fd}") + arguments,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            pass_fds=(config_fd,),
+        )
+    finally:
+        os.close(config_fd)
 
 
 def _classify_failure(output):
     lowered = output.lower()
-    if "tokenexpirederror" in lowered or "keyerror: 'location'" in lowered:
+    if any(
+        marker in lowered
+        for marker in (
+            "authenticationerror",
+            "authentication failed",
+            "authorization url could not be fetched",
+            "could not authenticate",
+            "refreshing tokens failed",
+            "tokenexpirederror",
+        )
+    ):
         return "vw_auth_unavailable"
     if "too many requests" in lowered or "429" in lowered:
         return "vw_rate_limited"
@@ -80,10 +120,10 @@ def check_readiness(force=False):
     error_code = _configuration_error()
     if error_code is None:
         try:
-            result = _run_cli(["get", "/vehicles"], timeout=min(VW_COMMAND_TIMEOUT, 30))
+            result = _run_cli(["list", "--setters"], timeout=min(VW_COMMAND_TIMEOUT, 30))
             if result.returncode != 0:
                 error_code = _classify_failure(result.stderr or result.stdout)
-            elif VW_VIN not in result.stdout:
+            elif f"/garage/{VW_VIN}/commands/honk-flash" not in result.stdout:
                 error_code = "vw_vehicle_unavailable"
         except subprocess.TimeoutExpired:
             error_code = "vw_timeout"
@@ -109,7 +149,7 @@ def run_vw_command(action_type):
     logger.info("Executing VW action=%s attempt=%s", action_type, attempt_id)
     try:
         result = _run_cli(
-            ["set", f"/vehicles/{VW_VIN}/controls/honkAndFlash", action_type]
+            ["set", f"/garage/{VW_VIN}/commands/honk-flash", action_type]
         )
     except subprocess.TimeoutExpired:
         error_code = "vw_timeout"
@@ -150,7 +190,7 @@ def readyz():
 
 @app.get("/horn")
 def trigger_horn():
-    payload, status_code = run_vw_command("honkandflash")
+    payload, status_code = run_vw_command("honk-and-flash")
     return jsonify(payload), status_code
 
 
