@@ -23,13 +23,30 @@ def test_execute_rule_requires_confirmation():
 
 def test_execute_device_command_validates_payload_before_cli():
     with patch.object(smartthings_mcp.subprocess, "run") as run, pytest.raises(
-        ValueError, match="non-empty command list"
+        ValueError, match="exactly one command"
     ):
         smartthings_mcp.execute_device_command(
             "3a528f45-0939-4e26-a88c-27c3c3e28ca8", "{}", confirm=True
         )
 
     run.assert_not_called()
+
+
+def test_execute_device_command_translates_cli_syntax():
+    completed = subprocess.CompletedProcess([], 0, "", "")
+
+    with patch.object(
+        smartthings_mcp.subprocess, "run", return_value=completed
+    ) as run:
+        result = smartthings_mcp.execute_device_command(
+            "3a528f45-0939-4e26-a88c-27c3c3e28ca8",
+            '[{"component":"main","capability":"switch","command":"on"}]',
+            confirm=True,
+        )
+
+    assert "switch:on" in run.call_args.args[0]
+    assert "--json" not in run.call_args.args[0]
+    assert result == {"status": "accepted"}
 
 
 def test_cli_errors_do_not_expose_stderr():

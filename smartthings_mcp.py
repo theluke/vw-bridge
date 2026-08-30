@@ -18,9 +18,12 @@ def _validate_id(value, name):
         raise ValueError(f"{name} must be a UUID") from error
 
 
-def _run_cli(*arguments):
+def _run_cli(*arguments, json_output=True):
+    command = [SMARTTHINGS_CLI, *arguments]
+    if json_output:
+        command.append("--json")
     result = subprocess.run(
-        [SMARTTHINGS_CLI, *arguments, "--json"],
+        command,
         capture_output=True,
         text=True,
         timeout=CLI_TIMEOUT,
@@ -28,6 +31,8 @@ def _run_cli(*arguments):
     )
     if result.returncode != 0:
         raise RuntimeError("SmartThings CLI request failed")
+    if not json_output:
+        return {"status": "accepted"}
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as error:
@@ -85,14 +90,18 @@ def list_scenes():
 def execute_rule(rule_id: str, confirm: bool = False):
     """Execute a Rule only after the user explicitly confirms the operation."""
     _require_confirmation(confirm)
-    return _run_cli("rules:execute", _validate_id(rule_id, "rule_id"))
+    return _run_cli(
+        "rules:execute", _validate_id(rule_id, "rule_id"), json_output=False
+    )
 
 
 @mcp.tool()
 def execute_scene(scene_id: str, confirm: bool = False):
     """Execute a Scene only after the user explicitly confirms the operation."""
     _require_confirmation(confirm)
-    return _run_cli("scenes:execute", _validate_id(scene_id, "scene_id"))
+    return _run_cli(
+        "scenes:execute", _validate_id(scene_id, "scene_id"), json_output=False
+    )
 
 
 @mcp.tool()
@@ -104,10 +113,23 @@ def execute_device_command(device_id: str, command_json: str, confirm: bool = Fa
         command = json.loads(command_json)
     except json.JSONDecodeError as error:
         raise ValueError("command_json must be valid JSON") from error
-    if not isinstance(command, list) or not command:
-        raise ValueError("command_json must be a non-empty command list")
-    encoded_command = json.dumps(command, separators=(",", ":"))
-    return _run_cli("devices:commands", device_id, encoded_command)
+    if not isinstance(command, list) or len(command) != 1:
+        raise ValueError("command_json must contain exactly one command")
+    item = command[0]
+    if not isinstance(item, dict) or not all(item.get(key) for key in ("capability", "command")):
+        raise ValueError("command requires capability and command")
+    component = item.get("component", "main")
+    prefix = "" if component == "main" else f"{component}:"
+    command_spec = f"{prefix}{item['capability']}:{item['command']}"
+    arguments = item.get("arguments", [])
+    if arguments:
+        if not isinstance(arguments, list):
+            raise ValueError("command arguments must be a list")
+        rendered = ",".join(json.dumps(argument) for argument in arguments)
+        command_spec += f"({rendered})"
+    return _run_cli(
+        "devices:commands", device_id, command_spec, json_output=False
+    )
 
 
 if __name__ == "__main__":
