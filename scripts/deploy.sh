@@ -57,6 +57,7 @@ deploy_phone_script() {
 mkdir -p "$backup_root" "$backup"
 rsync -a --exclude='.git/' --exclude='.env' --exclude='venv/' "$deploy_dir/" "$backup/"
 rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='venv/' "$stage/" "$deploy_dir/"
+printf '%s\n' "$revision" > "$deploy_dir/.deployed-revision"
 
 if ! "$deploy_dir/venv/bin/python" -m pip uninstall -q -y weconnect weconnect-cli \
     || ! "$deploy_dir/venv/bin/python" -m pip install -q -r "$deploy_dir/requirements.txt" \
@@ -72,7 +73,6 @@ if ! "$deploy_dir/venv/bin/python" -m pip uninstall -q -y weconnect weconnect-cl
     exit 1
 fi
 
-printf '%s\n' "$revision" > "$deploy_dir/.deployed-revision"
 printf 'DEPLOYED_SHA=%s\n' "$revision"
 curl -sS http://127.0.0.1:5000/readyz || true
 REMOTE
