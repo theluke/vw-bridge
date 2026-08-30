@@ -1,4 +1,5 @@
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -73,7 +74,13 @@ def _tap(node):
 def _wait_for_controls(timeout=20):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        root = _dump_ui()
+        try:
+            root = _dump_ui()
+        except AutomationError as error:
+            if str(error) not in ("adb_command_failed", "ui_unavailable"):
+                raise
+            time.sleep(1)
+            continue
         turn_signals = _find(root, "resource-id", TURN_SIGNALS_ID)
         horn = _find(root, "resource-id", HORN_ID)
         if turn_signals is not None and horn is not None:
@@ -93,6 +100,7 @@ def _prepare_app():
     _adb("shell", "wm", "dismiss-keyguard")
     _adb("shell", "cmd", "statusbar", "collapse")
     _adb("shell", "am", "start", "-n", APP_ACTIVITY)
+    time.sleep(1)
     return _wait_for_controls()
 
 
@@ -123,12 +131,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("status", "flash", "horn"))
     action = parser.parse_args().action
-    try:
-        payload = status() if action == "status" else run_action(action)
-    except (AutomationError, subprocess.TimeoutExpired) as error:
-        error_code = str(error) if isinstance(error, AutomationError) else "vw_command_timeout"
-        print(json.dumps({"status": "error", "error_code": error_code}))
-        return 1
+    with open(os.path.expanduser("~/.vw-android.lock"), "w", encoding="ascii") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            payload = status() if action == "status" else run_action(action)
+        except (AutomationError, subprocess.TimeoutExpired) as error:
+            error_code = str(error) if isinstance(error, AutomationError) else "vw_command_timeout"
+            print(json.dumps({"status": "error", "error_code": error_code}))
+            return 1
     print(json.dumps(payload))
     return 0
 

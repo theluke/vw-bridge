@@ -78,3 +78,17 @@ def test_adb_serial_uses_connected_device():
         vw_android_app.subprocess, "run", return_value=devices
     ):
         assert vw_android_app._adb_serial() == "127.0.0.1:45678"
+
+
+def test_wait_for_controls_retries_transient_ui_failure():
+    root = ET.fromstring(DETAILS_XML)
+
+    with patch.object(
+        vw_android_app,
+        "_dump_ui",
+        side_effect=[vw_android_app.AutomationError("ui_unavailable"), root],
+    ), patch.object(vw_android_app.time, "sleep"):
+        _, controls = vw_android_app._wait_for_controls()
+
+    assert controls["flash"] is root[1]
+    assert controls["horn"] is root[0]
