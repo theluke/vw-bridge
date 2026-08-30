@@ -10,6 +10,16 @@ termux-wake-lock || true
 sshd
 adb start-server
 
+endpoint_file="$HOME/.vw-android-adb-endpoint"
+if [[ -s "$endpoint_file" ]]; then
+    endpoint="$(head -n 1 "$endpoint_file")"
+    adb connect "$endpoint" >/dev/null 2>&1 || true
+    if adb devices | grep -Fq "$endpoint"$'\tdevice'; then
+        printf '%s connected stable ADB endpoint %s\n' "$(date -Iseconds)" "$endpoint"
+        exit 0
+    fi
+fi
+
 for attempt in $(seq 1 30); do
     while read -r port; do
         adb connect "127.0.0.1:$port" >/dev/null 2>&1 || true

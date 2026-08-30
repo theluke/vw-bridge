@@ -25,6 +25,7 @@ night; it remains available for the existing SmartThings routine.
 - Pi key `/home/luca/.ssh/vw-android`
 - Phone script `/data/data/com.termux/files/home/vw_android_app.py`
 - Boot recovery script `~/.termux/boot/vw-bridge.sh`
+- Stable ADB endpoint file `~/.vw-android-adb-endpoint`
 
 The phone has no LAN path from the wired hosts because the access point isolates
 clients. SSH uses the private Tailscale network. ADB stays entirely inside the
@@ -58,6 +59,11 @@ complete a command, including SSH and UI preparation overhead.
    listening ports until the paired ADB service reconnects. Android still needs
    to be unlocked once after a reboot before the app can operate normally.
 
+Tailscale is configured as Android's always-on VPN. ADB uses secure fixed TCP
+mode on the phone's Tailscale address, recorded as
+`100.88.221.13:5555` in `~/.vw-android-adb-endpoint`. Termux:Boot tries this
+stable endpoint first and retains random-port discovery as a fallback.
+
 ## Readiness and monitoring
 
 `/readyz` runs `python vw_android_app.py status` through Pi-to-phone SSH. Status
@@ -73,24 +79,27 @@ after the configured failure threshold.
 
 ## Recovery after reboot or port rotation
 
-1. Open Termux and run `sshd`.
-2. Enable Android Wireless debugging.
-3. In Termux, pair once if required:
+1. Unlock the phone once after boot and allow the always-on Tailscale VPN to
+   reconnect. Termux:Boot should start `sshd` and reconnect ADB automatically.
+2. If readiness remains degraded, open Termux and run `sshd`, then inspect
+   `~/android-boot.log`.
+3. If fixed TCP ADB is unavailable, enable Android Wireless debugging.
+4. In Termux, pair once if required:
 
    ```bash
    adb pair 127.0.0.1:<pairing-port> <six-digit-code>
    ```
 
-4. Read the main Wireless debugging `IP address & port`, then run:
+5. Read the main Wireless debugging `IP address & port`, then run:
 
    ```bash
    adb connect 127.0.0.1:<command-port>
    adb devices -l
    ```
 
-5. If the command port changed, set `VW_ANDROID_ADB_SERIAL` before running the
+6. If the command port changed, set `VW_ANDROID_ADB_SERIAL` before running the
    phone script or update its configured default and redeploy.
-6. Verify from the Pi with status only:
+7. Verify from the Pi with status only:
 
    ```bash
    ssh -i ~/.ssh/vw-android -p 8022 u0_a332@100.88.221.13 \
