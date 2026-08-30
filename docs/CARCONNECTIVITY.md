@@ -61,6 +61,9 @@ request does not satisfy the attestation requirement.
 2. Use the official Volkswagen app until then.
 3. The EU Data Act connector can provide authorized read-only vehicle data, but
    the portal does not permit vehicle commands, so it cannot restore flash.
+4. Production currently uses the official Android app fallback documented in
+  [ANDROID_APP.md](ANDROID_APP.md). This preserves both SmartThings actions
+  without attempting to bypass Volkswagen mobile attestation.
 
 Do not implement mobile-attestation bypasses or copy official-app secrets into
 this bridge. They expose the VW account and are not a production authentication

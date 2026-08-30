@@ -6,10 +6,12 @@ A lightweight Flask API wrapper for
 allows local network devices such as a SmartThings Hub to trigger Volkswagen
 vehicle actions through simple HTTP GET requests.
 
-> Operational status (2026-08-30): the bridge and Raspberry Pi are healthy and
-> the code uses CarConnectivity 0.11.10 with Volkswagen connector 0.10.6. VW
-> readiness remains degraded because CARIAD returns HTTP 403 before credentials
-> are submitted. See [CarConnectivity migration](docs/CARCONNECTIVITY.md).
+> Operational status (2026-08-30): Volkswagen blocks command-capable third-party
+> authentication, including CarConnectivity 0.11.10 with Volkswagen connector
+> 0.10.6. Production therefore uses the authenticated official Volkswagen app on
+> a dedicated Android phone. A lights-only flash was physically verified. Horn
+> remains configured for SmartThings but was not tested at night. See
+> [Android app fallback](docs/ANDROID_APP.md).
 
 ## How it Works
 The script invokes `carconnectivity-cli` and checks the Volkswagen connector's
@@ -71,6 +73,11 @@ The production command mappings are:
 
 The honk command has not been live-tested by policy. `/readyz` runs only
 `list --setters` and requires this command path to be advertised.
+
+With `VW_BACKEND=android-app`, the same HTTP endpoints call distinct official-app
+resources: `turnSignals` for `/flash` and `hornAndTurnSignals` for `/horn`.
+Readiness opens the command page and validates both controls without actuating
+either. The Pi reaches Termux over Tailscale using a dedicated SSH key.
 
 ## System Integration
 To run this as a background service on a Raspberry Pi:

@@ -26,6 +26,13 @@ VW_TOKEN_PATH = os.getenv(
 VW_CACHE_PATH = os.getenv(
     "VW_CACHE_PATH", "/home/luca/scripts/vw-bridge/.carconnectivity.cache"
 )
+VW_BACKEND = os.getenv("VW_BACKEND", "carconnectivity")
+VW_ANDROID_SSH_TARGET = os.getenv("VW_ANDROID_SSH_TARGET", "")
+VW_ANDROID_SSH_PORT = os.getenv("VW_ANDROID_SSH_PORT", "8022")
+VW_ANDROID_SSH_KEY = os.getenv("VW_ANDROID_SSH_KEY", "/home/luca/.ssh/vw-android")
+VW_ANDROID_SCRIPT = os.getenv(
+    "VW_ANDROID_SCRIPT", "/data/data/com.termux/files/home/vw_android_app.py"
+)
 VW_COMMAND_TIMEOUT = int(os.getenv("VW_COMMAND_TIMEOUT", "60"))
 VW_READY_CACHE_SECONDS = int(os.getenv("VW_READY_CACHE_SECONDS", "300"))
 
@@ -78,8 +85,45 @@ def _run_cli(arguments, timeout=VW_COMMAND_TIMEOUT):
         os.close(config_fd)
 
 
+def _run_android(action, timeout=VW_COMMAND_TIMEOUT):
+    return subprocess.run(
+        [
+            "ssh",
+            "-i",
+            VW_ANDROID_SSH_KEY,
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-p",
+            VW_ANDROID_SSH_PORT,
+            VW_ANDROID_SSH_TARGET,
+            "python",
+            VW_ANDROID_SCRIPT,
+            action,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def _classify_failure(output):
     lowered = output.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "adb_command_failed",
+            "adb_unavailable",
+            "connection refused",
+            "no route to host",
+            "permission denied",
+            "ui_unavailable",
+            "vw_app_not_ready",
+        )
+    ):
+        return "vw_phone_unavailable"
     if any(
         marker in lowered
         for marker in (
@@ -100,6 +144,14 @@ def _classify_failure(output):
 
 
 def _configuration_error():
+    if VW_BACKEND == "android-app":
+        if not VW_ANDROID_SSH_TARGET:
+            return "vw_phone_unavailable"
+        if not os.path.isfile(VW_ANDROID_SSH_KEY):
+            return "vw_phone_unavailable"
+        return None
+    if VW_BACKEND != "carconnectivity":
+        return "vw_backend_invalid"
     if not (VW_USERNAME and VW_PASSWORD and VW_SPIN):
         return "vw_credentials_missing"
     if not os.path.isfile(VW_CLI_PATH) or not os.access(VW_CLI_PATH, os.X_OK):
@@ -120,10 +172,15 @@ def check_readiness(force=False):
     error_code = _configuration_error()
     if error_code is None:
         try:
-            result = _run_cli(["list", "--setters"], timeout=min(VW_COMMAND_TIMEOUT, 30))
+            if VW_BACKEND == "android-app":
+                result = _run_android("status", timeout=min(VW_COMMAND_TIMEOUT, 30))
+            else:
+                result = _run_cli(["list", "--setters"], timeout=min(VW_COMMAND_TIMEOUT, 30))
             if result.returncode != 0:
                 error_code = _classify_failure(result.stderr or result.stdout)
-            elif f"/garage/{VW_VIN}/commands/honk-flash" not in result.stdout:
+            elif VW_BACKEND == "android-app" and '"status": "ready"' not in result.stdout:
+                error_code = "vw_phone_unavailable"
+            elif VW_BACKEND == "carconnectivity" and f"/garage/{VW_VIN}/commands/honk-flash" not in result.stdout:
                 error_code = "vw_vehicle_unavailable"
         except subprocess.TimeoutExpired:
             error_code = "vw_timeout"
@@ -148,9 +205,13 @@ def run_vw_command(action_type):
 
     logger.info("Executing VW action=%s attempt=%s", action_type, attempt_id)
     try:
-        result = _run_cli(
-            ["set", f"/garage/{VW_VIN}/commands/honk-flash", action_type]
-        )
+        if VW_BACKEND == "android-app":
+            android_action = "horn" if action_type == "honk-and-flash" else "flash"
+            result = _run_android(android_action)
+        else:
+            result = _run_cli(
+                ["set", f"/garage/{VW_VIN}/commands/honk-flash", action_type]
+            )
     except subprocess.TimeoutExpired:
         error_code = "vw_timeout"
     except OSError:

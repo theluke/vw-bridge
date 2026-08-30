@@ -94,3 +94,41 @@ def test_cli_command_does_not_expose_credentials():
     assert main.VW_PASSWORD not in command
     assert main.VW_SPIN not in command
     assert command[-1] == "/proc/self/fd/7"
+
+
+def test_android_readyz_checks_phone_status():
+    success = subprocess.CompletedProcess(
+        [], 0, '{"status": "ready", "backend": "android-app"}', ""
+    )
+
+    with patch.object(main, "VW_BACKEND", "android-app"), patch.object(
+        main, "_configuration_error", return_value=None
+    ), patch.object(main, "_run_android", return_value=success) as run_android:
+        response = main.app.test_client().get("/readyz")
+
+    assert response.status_code == 200
+    run_android.assert_called_once_with("status", timeout=30)
+
+
+def test_android_flash_uses_lights_only_action():
+    success = subprocess.CompletedProcess([], 0, '{"status": "success"}', "")
+
+    with patch.object(main, "VW_BACKEND", "android-app"), patch.object(
+        main, "_configuration_error", return_value=None
+    ), patch.object(main, "_run_android", return_value=success) as run_android:
+        response = main.app.test_client().get("/flash")
+
+    assert response.status_code == 200
+    run_android.assert_called_once_with("flash")
+
+
+def test_android_horn_uses_separate_remote_action():
+    success = subprocess.CompletedProcess([], 0, '{"status": "success"}', "")
+
+    with patch.object(main, "VW_BACKEND", "android-app"), patch.object(
+        main, "_configuration_error", return_value=None
+    ), patch.object(main, "_run_android", return_value=success) as run_android:
+        response = main.app.test_client().get("/horn")
+
+    assert response.status_code == 200
+    run_android.assert_called_once_with("horn")
