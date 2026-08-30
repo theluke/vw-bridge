@@ -30,21 +30,22 @@ backup_root="$HOME/vw-bridge-deploy-backups"
 backup="$backup_root/$(date +%Y%m%dT%H%M%S)-$revision"
 
 mkdir -p "$backup_root" "$backup"
-rsync -a --exclude='.env' --exclude='venv/' "$deploy_dir/" "$backup/"
-rsync -a --delete --exclude='.env' --exclude='venv/' "$stage/" "$deploy_dir/"
+rsync -a --exclude='.git/' --exclude='.env' --exclude='venv/' "$deploy_dir/" "$backup/"
+rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='venv/' "$stage/" "$deploy_dir/"
 
 if ! "$deploy_dir/venv/bin/python" -m pip install -q -r "$deploy_dir/requirements.txt" \
     || ! sudo install -m 0644 "$deploy_dir/vw-bridge.service" /etc/systemd/system/vw-bridge.service \
     || ! sudo systemctl daemon-reload \
     || ! sudo systemctl restart vw-bridge \
     || ! curl --retry 10 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:5000/healthz >/dev/null; then
-    rsync -a --delete --exclude='.env' --exclude='venv/' "$backup/" "$deploy_dir/"
+    rsync -a --delete --exclude='.git/' --exclude='.env' --exclude='venv/' "$backup/" "$deploy_dir/"
     sudo systemctl daemon-reload
     sudo systemctl restart vw-bridge
     echo "Deployment failed; restored $backup" >&2
     exit 1
 fi
 
+printf '%s\n' "$revision" > "$deploy_dir/.deployed-revision"
 printf 'DEPLOYED_SHA=%s\n' "$revision"
 curl -sS http://127.0.0.1:5000/readyz || true
 REMOTE
