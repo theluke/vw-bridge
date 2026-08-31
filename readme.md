@@ -77,7 +77,9 @@ The honk command has not been live-tested by policy. `/readyz` runs only
 With `VW_BACKEND=android-app`, the same HTTP endpoints call distinct official-app
 resources: `turnSignals` for `/flash` and `hornAndTurnSignals` for `/horn`.
 Readiness opens the command page and validates both controls without actuating
-either. The Pi reaches Termux over Tailscale using a dedicated SSH key.
+either. Production runs the automation on the ASUSWRT-Merlin router and reaches
+the phone through persistent USB ADB. Termux and Tailscale are fallback access,
+not part of the command path. See [Operations](docs/OPERATIONS.md).
 
 ## System Integration
 To run this as a background service on a Raspberry Pi:

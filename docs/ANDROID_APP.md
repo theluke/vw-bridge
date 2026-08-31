@@ -86,8 +86,9 @@ start automatically, so neither is used for unattended production commands.
 
 ## Readiness and monitoring
 
-`/readyz` runs `python vw_android_app.py status` through Pi-to-phone SSH. Status
-requires all of the following without sending a vehicle command:
+`/readyz` runs `python vw_android_app.py status` through Pi-to-router SSH and
+router-to-phone USB ADB. Status requires all of the following without sending a
+vehicle command:
 
 - ADB reports the phone as `device`.
 - The Volkswagen app launches while logged in.
@@ -96,6 +97,21 @@ requires all of the following without sending a vehicle command:
 
 The existing off-device monitor checks `/readyz` every five minutes and alerts
 after the configured failure threshold.
+
+## Verified behavior
+
+On 2026-08-31, repeated phone reboots reached the home screen with no manual
+unlock and no new USB fingerprint prompt. The modern ADB wrapper rediscovered
+the authorized phone, `/readyz` returned HTTP 200, and router failover remained
+`wan usb` with `usb0` active. ADB daemon restart also retained authorization.
+
+The SmartThings `Golf Flash` virtual switch was then triggered and physically
+flashed the vehicle indicators. Its switch reset to `off`, while `Golf HORN`
+remained `off` and was not invoked. The HTTP flash request reported
+`vw_timeout` after about 52 seconds even though the physical action succeeded;
+this is a completion-detection limitation, not evidence that the action failed.
+Do not automatically retry a timed-out command because that can duplicate a
+vehicle action.
 
 ## Recovery after reboot
 
@@ -127,7 +143,7 @@ after the configured failure threshold.
 
    ```bash
     ssh -i ~/.ssh/vw-router -p 2223 admin@192.168.1.1 \
-      env VW_ANDROID_ADB_PATH=/opt/share/vw-bridge/router-adb.sh /opt/bin/python3 \
+       env VW_ANDROID_ADB_PATH=/opt/share/vw-bridge/router-adb.sh /opt/bin/python3 \
        /opt/share/vw-bridge/vw_android_app.py status
    ```
 
