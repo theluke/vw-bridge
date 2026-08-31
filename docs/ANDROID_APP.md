@@ -44,7 +44,9 @@ ssh -p 2223 admin@192.168.1.1 'sh -s' < scripts/install-router-adb.sh
 The installer verifies Alpine's published SHA-256 checksum and installs current
 `android-tools` in `/opt/alpine-adb`. Entware ADB 1.0.32 must not be used: its
 authorization is session-only on Android 13. The deployed `router-adb.sh`
-wrapper restores the chroot's `/dev` and `/proc` mounts after router reboot.
+wrapper restores the chroot's `/dev` and `/proc` mounts after router reboot. It
+also restarts ADB once when a phone reboot re-enumerates USB without appearing
+in the existing daemon.
 
 ## Production environment
 
