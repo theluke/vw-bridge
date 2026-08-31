@@ -75,9 +75,12 @@ def test_adb_serial_uses_connected_device():
     )
 
     with patch.object(vw_android_app, "ADB_SERIAL", ""), patch.object(
+        vw_android_app, "ADB_PATH", "/opt/bin/adb"
+    ), patch.object(
         vw_android_app.subprocess, "run", return_value=devices
-    ):
+    ) as run:
         assert vw_android_app._adb_serial() == "127.0.0.1:45678"
+        assert run.call_args.args[0] == ["/opt/bin/adb", "devices"]
 
 
 def test_wait_for_controls_retries_transient_ui_failure():

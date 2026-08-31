@@ -33,6 +33,8 @@ VW_ANDROID_SSH_KEY = os.getenv("VW_ANDROID_SSH_KEY", "/home/luca/.ssh/vw-android
 VW_ANDROID_SCRIPT = os.getenv(
     "VW_ANDROID_SCRIPT", "/data/data/com.termux/files/home/vw_android_app.py"
 )
+VW_ANDROID_PYTHON = os.getenv("VW_ANDROID_PYTHON", "python")
+VW_ANDROID_ADB_PATH = os.getenv("VW_ANDROID_ADB_PATH", "adb")
 VW_COMMAND_TIMEOUT = int(os.getenv("VW_COMMAND_TIMEOUT", "90"))
 VW_READY_CACHE_SECONDS = int(os.getenv("VW_READY_CACHE_SECONDS", "300"))
 
@@ -98,7 +100,9 @@ def _run_android(action, timeout=VW_COMMAND_TIMEOUT):
             "-p",
             VW_ANDROID_SSH_PORT,
             VW_ANDROID_SSH_TARGET,
-            "python",
+            "env",
+            f"VW_ANDROID_ADB_PATH={VW_ANDROID_ADB_PATH}",
+            VW_ANDROID_PYTHON,
             VW_ANDROID_SCRIPT,
             action,
         ],

@@ -8,6 +8,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+ADB_PATH = os.getenv("VW_ANDROID_ADB_PATH", "adb")
 ADB_SERIAL = os.getenv("VW_ANDROID_ADB_SERIAL", "")
 APP_ACTIVITY = "com.volkswagen.weconnect/.SingleActivity"
 HOME_CONTROL = "Horn and Turn Signals. Open details"
@@ -24,7 +25,7 @@ def _adb_serial():
     if ADB_SERIAL:
         return ADB_SERIAL
     result = subprocess.run(
-        ["adb", "devices"], capture_output=True, text=True, timeout=10, check=False
+        [ADB_PATH, "devices"], capture_output=True, text=True, timeout=10, check=False
     )
     if result.returncode == 0:
         for line in result.stdout.splitlines()[1:]:
@@ -36,7 +37,7 @@ def _adb_serial():
 
 def _adb(*arguments, timeout=20):
     result = subprocess.run(
-        ["adb", "-s", _adb_serial(), *arguments],
+        [ADB_PATH, "-s", _adb_serial(), *arguments],
         capture_output=True,
         text=True,
         timeout=timeout,

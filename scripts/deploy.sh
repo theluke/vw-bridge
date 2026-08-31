@@ -33,25 +33,37 @@ env_value() {
     sed -n "s/^$1=//p" "$deploy_dir/.env" | tail -n 1
 }
 
-deploy_phone_script() {
-    local backend target port key script
+deploy_android_script() {
+    local adb_path backend boot_recovery key port python_path script target
     backend="$(env_value VW_BACKEND)"
     [[ "$backend" == "android-app" ]] || return 0
     target="$(env_value VW_ANDROID_SSH_TARGET)"
     port="$(env_value VW_ANDROID_SSH_PORT)"
     key="$(env_value VW_ANDROID_SSH_KEY)"
     script="$(env_value VW_ANDROID_SCRIPT)"
+    python_path="$(env_value VW_ANDROID_PYTHON)"
+    adb_path="$(env_value VW_ANDROID_ADB_PATH)"
+    boot_recovery="$(env_value VW_ANDROID_BOOT_RECOVERY)"
     port="${port:-8022}"
     key="${key:-$HOME/.ssh/vw-android}"
     script="${script:-/data/data/com.termux/files/home/vw_android_app.py}"
+    python_path="${python_path:-python}"
+    adb_path="${adb_path:-adb}"
+    boot_recovery="${boot_recovery:-true}"
     ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
-        "mkdir -p .termux/boot"
-    scp -q -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -P "$port" \
+        "mkdir -p '$(dirname "$script")'"
+    scp -O -q -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -P "$port" \
         "$deploy_dir/vw_android_app.py" "$target:$script"
-    scp -q -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -P "$port" \
-        "$deploy_dir/scripts/android-boot.sh" "$target:.termux/boot/vw-bridge.sh"
+    if [[ "$boot_recovery" == "true" ]]; then
+        ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
+            "mkdir -p .termux/boot"
+        scp -O -q -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -P "$port" \
+            "$deploy_dir/scripts/android-boot.sh" "$target:.termux/boot/vw-bridge.sh"
+        ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
+            "chmod 700 .termux/boot/vw-bridge.sh"
+    fi
     ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
-        "chmod 700 '$script' .termux/boot/vw-bridge.sh && python '$script' status" >/dev/null
+        "chmod 700 '$script' && env VW_ANDROID_ADB_PATH='$adb_path' '$python_path' '$script' status" >/dev/null
 }
 
 mkdir -p "$backup_root" "$backup"
@@ -61,7 +73,7 @@ printf '%s\n' "$revision" > "$deploy_dir/.deployed-revision"
 
 if ! "$deploy_dir/venv/bin/python" -m pip uninstall -q -y weconnect weconnect-cli \
     || ! "$deploy_dir/venv/bin/python" -m pip install -q -r "$deploy_dir/requirements.txt" \
-    || ! deploy_phone_script \
+    || ! deploy_android_script \
     || ! sudo install -m 0644 "$deploy_dir/vw-bridge.service" /etc/systemd/system/vw-bridge.service \
     || ! sudo systemctl daemon-reload \
     || ! sudo systemctl restart vw-bridge \

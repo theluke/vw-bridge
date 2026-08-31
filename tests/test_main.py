@@ -110,6 +110,27 @@ def test_android_readyz_checks_phone_status():
     run_android.assert_called_once_with("status", timeout=30)
 
 
+def test_android_command_uses_configured_remote_runtime():
+    with patch.object(main, "VW_ANDROID_SSH_TARGET", "admin@router"), patch.object(
+        main, "VW_ANDROID_SSH_PORT", "2223"
+    ), patch.object(main, "VW_ANDROID_SSH_KEY", "/key"), patch.object(
+        main, "VW_ANDROID_PYTHON", "/opt/bin/python3"
+    ), patch.object(main, "VW_ANDROID_ADB_PATH", "/opt/bin/adb"), patch.object(
+        main, "VW_ANDROID_SCRIPT", "/opt/share/vw-bridge/vw_android_app.py"
+    ), patch.object(main.subprocess, "run") as run:
+        main._run_android("status")
+
+    command = run.call_args.args[0]
+    assert command[-6:] == [
+        "admin@router",
+        "env",
+        "VW_ANDROID_ADB_PATH=/opt/bin/adb",
+        "/opt/bin/python3",
+        "/opt/share/vw-bridge/vw_android_app.py",
+        "status",
+    ]
+
+
 def test_android_flash_uses_lights_only_action():
     success = subprocess.CompletedProcess([], 0, '{"status": "success"}', "")
 

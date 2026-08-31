@@ -20,7 +20,8 @@ if [[ -s "$endpoint_file" ]]; then
     fi
 fi
 
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 60); do
+    adb reconnect offline >/dev/null 2>&1 || true
     while read -r port; do
         adb connect "127.0.0.1:$port" >/dev/null 2>&1 || true
         if adb devices | grep -Eq "^127\.0\.0\.1:$port[[:space:]]+device$"; then
@@ -34,14 +35,14 @@ import socket
 
 def is_open(port):
     sock = socket.socket()
-    sock.settimeout(0.05)
+    sock.settimeout(0.02)
     try:
         return port if sock.connect_ex(("127.0.0.1", port)) == 0 else None
     finally:
         sock.close()
 
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=128) as executor:
+with concurrent.futures.ThreadPoolExecutor(max_workers=512) as executor:
     for port in executor.map(is_open, range(30000, 50001)):
         if port is not None:
             print(port)

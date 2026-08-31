@@ -20,49 +20,54 @@ night; it remains available for the existing SmartThings routine.
 
 - Samsung A22, Android 13, official package `com.volkswagen.weconnect`
 - Tailscale address `100.88.221.13`
-- Termux from F-Droid with OpenSSH, Python, and Android platform tools
-- Wireless debugging paired locally from Termux to Android ADB
-- Pi key `/home/luca/.ssh/vw-android`
-- Phone script `/data/data/com.termux/files/home/vw_android_app.py`
-- Boot recovery script `~/.termux/boot/vw-bridge.sh`
-- Stable ADB endpoint file `~/.vw-android-adb-endpoint`
+- ASUSWRT-Merlin router at `192.168.1.1:2223`, with Entware on USB storage
+- Router packages `adb` and `python3`
+- A data-capable USB connection from the phone to the router
+- Pi key `/home/luca/.ssh/vw-router`
+- Router script `/opt/share/vw-bridge/vw_android_app.py`
+- Termux, Tailscale, and Wireless debugging as a fallback recovery path
 
-The phone has no LAN path from the wired hosts because the access point isolates
-clients. SSH uses the private Tailscale network. ADB stays entirely inside the
-phone at `127.0.0.1:<wireless-debugging-port>`.
+The production path is Pi to router over SSH, then router to phone over USB ADB.
+The same USB composite connection keeps Samsung USB tethering available as the
+router's secondary WAN; Merlin remains configured as `wan usb` in failover mode.
+USB ADB does not rotate ports and is available after reboot without a lockscreen
+swipe. The phone's Tailscale and Termux services are not in the command path.
 
 ## Production environment
 
 ```text
 VW_BACKEND=android-app
-VW_ANDROID_SSH_TARGET=u0_a332@100.88.221.13
-VW_ANDROID_SSH_PORT=8022
-VW_ANDROID_SSH_KEY=/home/luca/.ssh/vw-android
-VW_ANDROID_SCRIPT=/data/data/com.termux/files/home/vw_android_app.py
+VW_ANDROID_SSH_TARGET=admin@192.168.1.1
+VW_ANDROID_SSH_PORT=2223
+VW_ANDROID_SSH_KEY=/home/luca/.ssh/vw-router
+VW_ANDROID_SCRIPT=/opt/share/vw-bridge/vw_android_app.py
+VW_ANDROID_PYTHON=/opt/bin/python3
+VW_ANDROID_ADB_PATH=/opt/bin/adb
+VW_ANDROID_BOOT_RECOVERY=false
 ```
 
-The standard deploy script copies the committed phone script over SSH and runs
-only its non-actuating `status` command before restarting the bridge.
+The standard deploy script copies the committed automation script to the router
+using Merlin-compatible legacy SCP and runs only its non-actuating `status`
+command before restarting the bridge.
 Set `VW_COMMAND_TIMEOUT=90`; the official app can take about one minute to
 complete a command, including SSH and UI preparation overhead.
 
 ## Phone requirements
 
 1. Keep the phone powered and physically secured.
-2. Keep Tailscale, Termux SSH, and Wireless debugging enabled.
+2. Keep USB debugging enabled and permanently authorize the router's ADB key.
 3. Keep the official Volkswagen app logged in.
-4. Use no secure screen lock, because unattended UI automation cannot enter a
-   PIN. The bridge wakes the screen and dismisses a swipe keyguard.
+4. Set **Screen lock type** to **None**, not Swipe. Unattended UI automation
+   cannot enter a PIN, and Android may not start ADB before a swipe keyguard is
+   dismissed.
 5. Exclude Tailscale, Termux, and the Volkswagen app from battery optimization.
-6. Disable Samsung automatic restart. A reboot stops Termux SSH and rotates the
-   local Wireless-debugging command port. Termux:Boot starts SSH and scans local
-   listening ports until the paired ADB service reconnects. Android still needs
-   to be unlocked once after a reboot before the app can operate normally.
+6. Keep USB tethering enabled for the router's WAN failover. USB debugging and
+   tethering coexist on the Samsung composite USB device.
 
-Tailscale is configured as Android's always-on VPN. ADB uses secure fixed TCP
-mode on the phone's Tailscale address, recorded as
-`100.88.221.13:5555` in `~/.vw-android-adb-endpoint`. Termux:Boot tries this
-stable endpoint first and retains random-port discovery as a fallback.
+For fallback access, Tailscale is configured as Android's always-on VPN and
+Termux plus Termux:Boot are battery-unrestricted and never sleeping. Samsung
+resets fixed `adb tcpip 5555` mode during reboot, and Wireless debugging may not
+start automatically, so neither is used for unattended production commands.
 
 ## Readiness and monitoring
 
@@ -77,33 +82,37 @@ requires all of the following without sending a vehicle command:
 The existing off-device monitor checks `/readyz` every five minutes and alerts
 after the configured failure threshold.
 
-## Recovery after reboot or port rotation
+## Recovery after reboot
 
-1. Unlock the phone once after boot and allow the always-on Tailscale VPN to
-   reconnect. Termux:Boot should start `sshd` and reconnect ADB automatically.
-2. If readiness remains degraded, open Termux and run `sshd`, then inspect
-   `~/android-boot.log`.
-3. If fixed TCP ADB is unavailable, enable Android Wireless debugging.
-4. In Termux, pair once if required:
+1. Check that the phone is connected to the ASUS router by a data-capable cable
+   and that USB tethering remains enabled.
+2. On the router, verify `/opt/bin/adb devices -l` lists the Samsung as `device`.
+3. If it is `unauthorized`, accept the phone prompt with **Always allow from
+   this computer**. If absent, verify Developer options > USB debugging.
+4. Use Termux/Tailscale only if the USB path is unavailable. Open Termux and run
+   `sshd`, then inspect `~/android-boot.log`.
+5. Enable Android Wireless debugging if fallback ADB is required.
+6. In Termux, pair once if required:
 
    ```bash
    adb pair 127.0.0.1:<pairing-port> <six-digit-code>
    ```
 
-5. Read the main Wireless debugging `IP address & port`, then run:
+7. Read the main Wireless debugging `IP address & port`, then run:
 
    ```bash
    adb connect 127.0.0.1:<command-port>
    adb devices -l
    ```
 
-6. If the command port changed, set `VW_ANDROID_ADB_SERIAL` before running the
+8. If the command port changed, set `VW_ANDROID_ADB_SERIAL` before running the
    phone script or update its configured default and redeploy.
-7. Verify from the Pi with status only:
+9. Verify the production path from the Pi with status only:
 
    ```bash
-   ssh -i ~/.ssh/vw-android -p 8022 u0_a332@100.88.221.13 \
-     python /data/data/com.termux/files/home/vw_android_app.py status
+    ssh -i ~/.ssh/vw-router -p 2223 admin@192.168.1.1 \
+       env VW_ANDROID_ADB_PATH=/opt/bin/adb /opt/bin/python3 \
+       /opt/share/vw-bridge/vw_android_app.py status
    ```
 
 Never use `/horn` as a diagnostic probe. Use `/readyz`; test horn only during an
