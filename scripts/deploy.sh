@@ -61,6 +61,11 @@ deploy_android_script() {
             "$deploy_dir/scripts/android-boot.sh" "$target:.termux/boot/vw-bridge.sh"
         ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
             "chmod 700 .termux/boot/vw-bridge.sh"
+    else
+        scp -O -q -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -P "$port" \
+            "$deploy_dir/scripts/router-adb.sh" "$target:$(dirname "$script")/router-adb.sh"
+        ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
+            "chmod 700 '$(dirname "$script")/router-adb.sh'"
     fi
     ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -p "$port" "$target" \
         "chmod 700 '$script' && env VW_ANDROID_ADB_PATH='$adb_path' '$python_path' '$script' status" >/dev/null
