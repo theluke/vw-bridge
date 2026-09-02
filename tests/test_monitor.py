@@ -44,3 +44,22 @@ def test_tailscale_requires_named_peer_online():
         result = monitor.check_tailscale("raspi-dns")
 
     assert result == monitor.CheckResult("tailscale", False, "peer_offline")
+
+
+def test_readiness_check_allows_android_probe_to_finish():
+    with patch.object(
+        monitor, "check_http", return_value=healthy_results()[0]
+    ) as check_http, patch.object(
+        monitor, "check_service", return_value=healthy_results()[0]
+    ), patch.object(monitor, "check_tailscale", return_value=healthy_results()[0]):
+        monitor.run_checks("http://bridge", "bridge", "tailscale", readiness_timeout=45)
+
+    assert check_http.call_args_list[0].args == (
+        "bridge_liveness",
+        "http://bridge/healthz",
+    )
+    assert check_http.call_args_list[1].args == (
+        "vw_readiness",
+        "http://bridge/readyz",
+    )
+    assert check_http.call_args_list[1].kwargs == {"timeout": 45}

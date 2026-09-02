@@ -100,6 +100,7 @@ def _prepare_app():
     _adb("shell", "input", "keyevent", "KEYCODE_WAKEUP")
     _adb("shell", "wm", "dismiss-keyguard")
     _adb("shell", "cmd", "statusbar", "collapse")
+    _adb("shell", "am", "force-stop", "com.volkswagen.weconnect")
     _adb("shell", "am", "start", "-n", APP_ACTIVITY)
     time.sleep(1)
     return _wait_for_controls()

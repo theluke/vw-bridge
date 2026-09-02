@@ -59,6 +59,11 @@ ssh -p 2223 admin@192.168.1.1 \
 Expected results are HTTP 200 with `"ready":true`, an ADB device state of
 `device`, and app status `"status":"ready"`.
 
+Each status or action preparation force-stops and relaunches the Volkswagen app
+before locating controls. This recovers stale connection-error screens without
+triggering flash or horn. The monitor gives `/readyz` 45 seconds to complete;
+override this only with `VW_MONITOR_READY_TIMEOUT` on the monitoring host.
+
 ## Reboot recovery
 
 The phone screen-lock type must be **None**, USB debugging must remain enabled,

@@ -21,9 +21,9 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def check_http(name, url):
+def check_http(name, url, timeout=15):
     try:
-        with urllib.request.urlopen(url, timeout=15) as response:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
             payload = json.load(response)
         if response.status == 200:
             return CheckResult(name, True, payload.get("status", "ok"))
@@ -84,11 +84,11 @@ def check_tailscale(hostname):
     return CheckResult("tailscale", True, "online")
 
 
-def run_checks(base_url, ssh_host, tailscale_hostname):
+def run_checks(base_url, ssh_host, tailscale_hostname, readiness_timeout=45):
     base_url = base_url.rstrip("/")
     return [
         check_http("bridge_liveness", base_url + "/healthz"),
-        check_http("vw_readiness", base_url + "/readyz"),
+        check_http("vw_readiness", base_url + "/readyz", timeout=readiness_timeout),
         check_service(ssh_host),
         check_tailscale(tailscale_hostname),
     ]
@@ -158,11 +158,14 @@ def main():
     state_path = Path(os.getenv("VW_MONITOR_STATE", "/var/lib/vw-bridge-monitor/state.json"))
     threshold = int(os.getenv("VW_MONITOR_FAILURE_THRESHOLD", "3"))
     reminder_seconds = int(os.getenv("VW_MONITOR_REMINDER_SECONDS", "21600"))
+    readiness_timeout = int(os.getenv("VW_MONITOR_READY_TIMEOUT", "45"))
     recipient = os.getenv("ALERT_EMAIL_TO", "")
     sender = os.getenv("ALERT_EMAIL_FROM", recipient)
     msmtp_path = os.getenv("MSMTP_PATH", "/usr/bin/msmtp")
 
-    results = run_checks(base_url, ssh_host, tailscale_hostname)
+    results = run_checks(
+        base_url, ssh_host, tailscale_hostname, readiness_timeout=readiness_timeout
+    )
     state = load_state(state_path)
     notification, _ = update_incident(
         state, results, threshold, reminder_seconds, int(time.time())

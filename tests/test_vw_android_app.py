@@ -95,3 +95,23 @@ def test_wait_for_controls_retries_transient_ui_failure():
 
     assert controls["flash"] is root[1]
     assert controls["horn"] is root[0]
+
+
+def test_prepare_app_restarts_stale_app_before_launching():
+    root = ET.fromstring(DETAILS_XML)
+    controls = {"horn": root[0], "flash": root[1]}
+
+    with patch.object(
+        vw_android_app,
+        "_adb",
+        side_effect=["device", "", "", "", "", ""],
+    ) as adb, patch.object(
+        vw_android_app, "_wait_for_controls", return_value=(root, controls)
+    ), patch.object(vw_android_app.time, "sleep"):
+        assert vw_android_app._prepare_app() == (root, controls)
+
+    commands = [call.args for call in adb.call_args_list]
+    assert commands[-2:] == [
+        ("shell", "am", "force-stop", "com.volkswagen.weconnect"),
+        ("shell", "am", "start", "-n", vw_android_app.APP_ACTIVITY),
+    ]

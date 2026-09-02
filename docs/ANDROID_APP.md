@@ -95,6 +95,12 @@ vehicle command:
 - The command details page is reachable.
 - Both `turnSignals` and `hornAndTurnSignals` resources are present.
 
+Before each serialized readiness probe or action, the automation force-stops and
+relaunches the official app. This clears stale in-app connection-error screens;
+it does not tap a vehicle command. The off-device monitor allows 45 seconds for
+readiness so the bridge can return a specific phone or app error instead of a
+misleading HTTP timeout.
+
 The existing off-device monitor checks `/readyz` every five minutes and alerts
 after the configured failure threshold.
 
